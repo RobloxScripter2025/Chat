@@ -75,7 +75,7 @@ if(!username) {
   localStorage.setItem("solara_username", username);
 }
 
-// Helper to display messages
+// Function to display a message
 function addMessage(msg) {
   const div = document.createElement("div");
   div.className = "msg";
@@ -89,23 +89,24 @@ socket.on("chatHistory", (history) => {
   history.forEach(addMessage);
 });
 
-// Receive new messages from server (including own)
+// Receive new messages from server
 socket.on("chatMessage", (msg) => {
   addMessage(msg);
 });
 
-// Send message function
+// Send message
 function sendMessage() {
   const text = messageInput.value.trim();
-  if(!text) return;
-
+  if (!text) return;
   socket.emit("chatMessage", { user: username, text });
   messageInput.value = "";
 }
 
-// Bind send
+// Bind send events
 sendBtn.onclick = sendMessage;
-messageInput.addEventListener("keydown", (e) => { if(e.key === "Enter") sendMessage(); });
+messageInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendMessage();
+});
 </script>
 </body>
 </html>
