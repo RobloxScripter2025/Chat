@@ -10,16 +10,12 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*", // allow connections from anywhere
-  },
-});
+const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const HISTORY_FILE = path.join(__dirname, "chat.json");
 
-// Load messages or initialize empty
+// Load previous messages or start empty
 let messages = [];
 if (fs.existsSync(HISTORY_FILE)) {
   try {
@@ -29,16 +25,16 @@ if (fs.existsSync(HISTORY_FILE)) {
   }
 }
 
-// Serve static files (index.html at root)
+// Serve static files
 app.use(express.static(path.join(__dirname, "public")));
 
 io.on("connection", (socket) => {
   console.log("🟢 User connected");
 
-  // Send history to new user
+  // Send chat history to the new user
   socket.emit("chatHistory", messages);
 
-  // Listen for messages
+  // Listen for new messages
   socket.on("chatMessage", (msg) => {
     const messageData = {
       user: msg.user || "Anonymous",
@@ -46,12 +42,11 @@ io.on("connection", (socket) => {
       time: new Date().toLocaleTimeString(),
     };
 
-    // Save message
     messages.push(messageData);
-    messages = messages.slice(-100);
+    messages = messages.slice(-100); // keep last 100 messages
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(messages, null, 2));
 
-    // Broadcast to all users (including sender)
+    // Broadcast message to all connected users
     io.emit("chatMessage", messageData);
   });
 
