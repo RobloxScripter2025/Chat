@@ -10,12 +10,16 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*", // allow connections from anywhere
+  },
+});
 
 const PORT = process.env.PORT || 3000;
 const HISTORY_FILE = path.join(__dirname, "chat.json");
 
-// Load previous messages or start empty
+// Load messages or initialize empty
 let messages = [];
 if (fs.existsSync(HISTORY_FILE)) {
   try {
@@ -25,26 +29,30 @@ if (fs.existsSync(HISTORY_FILE)) {
   }
 }
 
-// Serve the public folder (index.html at root)
+// Serve static files (index.html at root)
 app.use(express.static(path.join(__dirname, "public")));
 
 io.on("connection", (socket) => {
   console.log("🟢 User connected");
 
-  // send chat history
+  // Send history to new user
   socket.emit("chatHistory", messages);
 
-  // new chat message
-  socket.on("chatMessage", ({ user, text }) => {
-    const msg = {
-      user: user || "Anonymous",
-      text: text || "",
+  // Listen for messages
+  socket.on("chatMessage", (msg) => {
+    const messageData = {
+      user: msg.user || "Anonymous",
+      text: msg.text || "",
       time: new Date().toLocaleTimeString(),
     };
-    messages.push(msg);
-    messages = messages.slice(-100); // keep last 100
+
+    // Save message
+    messages.push(messageData);
+    messages = messages.slice(-100);
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(messages, null, 2));
-    io.emit("chatMessage", msg); // broadcast to all users
+
+    // Broadcast to all users (including sender)
+    io.emit("chatMessage", messageData);
   });
 
   socket.on("disconnect", () => {
