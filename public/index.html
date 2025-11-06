@@ -1,4 +1,4 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -89,7 +89,7 @@ socket.on("chatHistory", (history) => {
   history.forEach(addMessage);
 });
 
-// Receive new messages
+// Receive new messages from server (including own)
 socket.on("chatMessage", (msg) => {
   addMessage(msg);
 });
@@ -99,14 +99,7 @@ function sendMessage() {
   const text = messageInput.value.trim();
   if(!text) return;
 
-  const msg = { user: username, text };
-
-  // Immediately display own message
-  addMessage({ ...msg, time: new Date().toLocaleTimeString() });
-
-  // Send to server
-  socket.emit("chatMessage", msg);
-
+  socket.emit("chatMessage", { user: username, text });
   messageInput.value = "";
 }
 
