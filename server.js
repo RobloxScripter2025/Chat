@@ -39,7 +39,7 @@ app.use((req, res, next) => {
 });
 
 // Admin routes
-const ADMIN_PASSWORD = "yourpassword"; // Change this
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 app.get("/admin.html", (req, res) => res.sendFile(path.join("./public/admin.html")));
 
