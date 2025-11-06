@@ -24,6 +24,16 @@ if (fs.existsSync(HISTORY_FILE)) {
 // Serve static files (index.html etc.)
 app.use(express.static("."));
 
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve everything in public at root /
+app.use(express.static(path.join(__dirname, "public")));
+
+
 // When a user connects
 io.on("connection", (socket) => {
   console.log("🟢 New user connected");
