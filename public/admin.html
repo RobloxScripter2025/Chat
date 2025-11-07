@@ -1,86 +1,72 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Admin Panel</title>
-<style>
-body{font-family:Inter,system-ui;background:#070607;color:#ddd;padding:18px}
-table{width:100%;border-collapse:collapse}
-th,td{padding:8px;border:1px solid #333}
-button{background:#8b5cf6;color:white;border:none;padding:6px 10px;border-radius:6px;cursor:pointer}
-.inputRow{display:flex;gap:8px;margin-bottom:12px}
-</style>
+  <meta charset="UTF-8">
+  <title>Admin Panel</title>
+  <style>
+    body { background: #0d0d0d; color: white; font-family: Arial; padding: 20px; }
+    input, button { padding: 8px; margin: 5px; border-radius: 5px; border: none; }
+    button { background: purple; color: white; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #555; padding: 8px; }
+  </style>
 </head>
 <body>
-  <h2>Admin Panel</h2>
+  <h1>Admin Panel</h1>
+  <h2>Manually Ban User</h2>
+  <input id="banId" placeholder="User ID" />
+  <input id="banReason" placeholder="Reason" />
+  <button id="banBtn">Ban</button>
 
-  <div class="inputRow">
-    <input id="adminPassword" type="password" placeholder="Admin password" />
-    <input id="banUserId" placeholder="UserID to ban (e.g. skt_xxx)" />
-    <input id="banReason" placeholder="Reason (optional)" />
-    <button id="banBtn">Ban by UserID</button>
-  </div>
+  <h2>Currently Banned Users</h2>
+  <table id="bans"><tr><th>Username</th><th>Cookie/UserID</th><th>Reason</th><th>Unban</th></tr></table>
 
-  <h3>Current bans</h3>
-  <table id="bansTable">
-    <tr><th>#</th><th>Username</th><th>Cookie/UserID</th><th>Reason</th><th>Action</th></tr>
-  </table>
-
-<script>
-  async function loadBans() {
-    const res = await fetch('/bans.json');
-    const bans = await res.json();
-    const table = document.getElementById('bansTable');
-    // clear rows (except header)
-    table.querySelectorAll('tr:not(:first-child)').forEach(r => r.remove());
-    bans.forEach((b, i) => {
-      const row = table.insertRow();
-      row.innerHTML = `<td>${i}</td>
-        <td>${b.username}</td><td>${b.cookie}</td><td>${b.reason}</td>
-        <td><button onclick="unban(${i})">Unban</button></td>`;
-    });
-  }
-
-  async function unban(index) {
-    const password = document.getElementById('adminPassword').value;
-    if (!password) return alert('Enter admin password');
-    const res = await fetch(`/unban/${index}`, {
-      method:'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ password })
-    });
-    if (res.ok) {
-      alert('Unbanned');
-      loadBans();
-    } else {
-      alert('Wrong password or error');
+  <script>
+    async function loadBans() {
+      const res = await fetch("/api/bans");
+      const data = await res.json();
+      const table = document.getElementById("bans");
+      table.innerHTML = "<tr><th>Username</th><th>Cookie/UserID</th><th>Reason</th><th>Unban</th></tr>";
+      data.forEach(b => {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${b.username || "Unknown"}</td>
+          <td>${b.cookie}</td>
+          <td>${b.reason}</td>
+          <td><button onclick="unban('${b.cookie}')">Unban</button></td>
+        `;
+        table.appendChild(row);
+      });
     }
-  }
 
-  // Ban by userid (admin)
-  document.getElementById('banBtn').onclick = async () => {
-    const password = document.getElementById('adminPassword').value;
-    const userid = document.getElementById('banUserId').value.trim();
-    const reason = document.getElementById('banReason').value.trim();
-    if (!password) return alert('Enter admin password');
-    if (!userid) return alert('Enter user id to ban');
-    const res = await fetch('/ban/userid', {
-      method:'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ password, userid, reason })
-    });
-    if (res.ok) {
-      alert('User banned');
+    document.getElementById("banBtn").onclick = async () => {
+      const id = document.getElementById("banId").value.trim();
+      const reason = document.getElementById("banReason").value.trim();
+      const password = prompt("Admin password:");
+      if (!id || !reason || !password) return alert("All fields required.");
+
+      const res = await fetch("/admin/ban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, reason, password })
+      });
+      alert(await res.text());
       loadBans();
-    } else {
-      const text = await res.text();
-      alert('Error: ' + text);
-    }
-  };
+    };
 
-  // initial load
-  loadBans();
-</script>
+    async function unban(id) {
+      const password = prompt("Admin password:");
+      if (!password) return;
+      const res = await fetch("/admin/unban", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, password })
+      });
+      alert(await res.text());
+      loadBans();
+    }
+
+    loadBans();
+  </script>
 </body>
 </html>
