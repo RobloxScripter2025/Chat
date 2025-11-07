@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-const ADMIN_PASSWORDS = [process.env.ADMIN_PASSWORD, process.env.COADMIN]
+const ADMIN_PASSWORDS = [process.env.ADMIN_PASSWORD, process.env.COADMIN];
 
 // Paths
 const BANNED_WORDS_FILE = path.join(__dirname, "bannedwords.json");
