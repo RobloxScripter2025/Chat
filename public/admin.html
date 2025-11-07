@@ -47,7 +47,7 @@
 
   <h2>Chat Log</h2>
   <table id="chat">
-    <tr><th>Username</th><th>Message</th><th>Action</th></tr>
+    <tr><th>Username</th><th>Message</th></tr>
   </table>
 
   <script>
@@ -85,30 +85,15 @@
       const res = await fetch("/chat-history.json");
       const chat = await res.json();
       const table = document.getElementById("chat");
-      table.innerHTML = "<tr><th>Username</th><th>Message</th><th>Action</th></tr>";
-      chat.forEach((m, i) => {
+      table.innerHTML = "<tr><th>Username</th><th>Message</th></tr>";
+      chat.forEach(m => {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${m.username || "Unknown"}</td>
           <td class="${m.system ? 'system' : ''}">${m.message}</td>
-          <td><button onclick="deleteMessage(${i})">Delete</button></td>
         `;
         table.appendChild(row);
       });
-    }
-
-    async function deleteMessage(index) {
-      const res = await fetch("/admin/delete-message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index, password })
-      });
-      if (res.ok) {
-        alert("Message deleted!");
-        loadChat();
-      } else {
-        alert("Failed to delete message.");
-      }
     }
 
     loadBans();
