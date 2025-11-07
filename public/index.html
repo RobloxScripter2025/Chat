@@ -5,6 +5,7 @@
   <title>Chat Room</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       background: #0d0d0d;
@@ -12,30 +13,31 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
-      justify-content: flex-end;
     }
 
+    /* Chat container */
     #chat {
       flex: 1;
       max-width: 900px;
-      margin: 20px auto 0;
+      margin: 20px auto;
       padding: 20px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      border-radius: 10px;
       background: #111;
+      border-radius: 10px;
+      border: 1px solid #333;
     }
 
+    /* Individual messages */
     #chat div {
-      max-width: 60%;
-      padding: 12px 18px;
-      border-radius: 20px;
+      padding: 10px 15px;
+      border-radius: 10px;
       word-wrap: break-word;
       line-height: 1.4;
-      position: relative;
-      animation: fadeIn 0.3s ease-in;
+      background: #1a1a1a;
+      border: 1px solid #333;
     }
 
     #chat .system {
@@ -43,50 +45,30 @@
       color: #ff4d4d;
       font-weight: bold;
       text-align: center;
-      border-radius: 10px;
-      max-width: 90%;
-      margin: 0 auto;
     }
 
     #chat .username {
       font-weight: bold;
-      cursor: pointer;
       color: #b566ff;
+      cursor: pointer;
       margin-right: 5px;
     }
 
-    /* Different bubble colors for self vs others */
-    #chat .message.self {
-      background: #5b2be0;
-      align-self: flex-end;
-      color: white;
-    }
-
-    #chat .message.other {
-      background: #1a1a1a;
-      align-self: flex-start;
-      color: #ddd;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
+    /* Input bar */
     #messageForm {
       display: flex;
       max-width: 900px;
       margin: 0 auto 20px;
       padding: 15px;
       background: #111;
-      border-top: 1px solid #333;
-      gap: 10px;
       border-radius: 10px;
+      border: 1px solid #333;
+      gap: 10px;
     }
 
     #messageForm input {
       flex: 1;
-      padding: 12px 18px;
+      padding: 12px 15px;
       border-radius: 25px;
       border: none;
       background: #1a1a1a;
@@ -172,8 +154,6 @@
         div.classList.add("system");
         div.textContent = msg.message;
       } else {
-        div.classList.add("message");
-        div.classList.add(msg.username === username ? 'self' : 'other');
         const nameSpan = document.createElement("span");
         nameSpan.textContent = msg.username;
         nameSpan.classList.add("username");
