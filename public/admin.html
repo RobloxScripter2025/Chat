@@ -25,7 +25,6 @@
   </table>
 
   <script>
-    // Load bans
     async function loadBans() {
       const res = await fetch("/api/bans");
       const data = await res.json();
@@ -45,7 +44,6 @@
       });
     }
 
-    // Ban button
     document.getElementById("banBtn").onclick = async () => {
       const id = document.getElementById("banId").value.trim();
       const reason = document.getElementById("banReason").value.trim();
@@ -63,7 +61,6 @@
       loadBans();
     };
 
-    // Unban function
     async function unban(id) {
       const password = prompt("Admin password:");
       if (!password) return;
