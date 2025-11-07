@@ -140,24 +140,31 @@ app.get("/api/bans", (req, res) => {
   res.json(bans);
 });
 
-// Manual ban
+// Manual ban: only ID + reason required, username fetched automatically
 app.post("/admin/ban", (req, res) => {
-  const { id, username, reason, password } = req.body;
+  const { id, reason, password } = req.body;
   if (password !== ADMIN_PASSWORD) return res.status(403).send("Invalid password");
 
-  const userNameToUse = username || "Unknown";
+  // Find username from chat history
+  let userNameToUse = "Unknown";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].userId === id) {
+      userNameToUse = messages[i].username;
+      break;
+    }
+  }
 
   bans.push({ username: userNameToUse, cookie: id, reason, time: Date.now() });
   saveBans();
 
-  const sysMsg = { username: "AutoMod", message: `User ${userNameToUse} (${id}) has been manually banned for ${reason}`, system: true };
+  const sysMsg = { username: "AutoMod", message: `${userNameToUse} has been manually banned for ${reason}`, system: true };
   io.emit("chat message", sysMsg);
 
   messages.push(sysMsg);
   messages = messages.slice(-100);
   saveMessages();
 
-  res.send(`User ${userNameToUse} (${id}) banned for ${reason}`);
+  res.send(`${userNameToUse} (${id}) banned for ${reason}`);
 });
 
 // Unban
