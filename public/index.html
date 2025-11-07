@@ -1,115 +1,113 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Solara Chat</title>
-<script src="/socket.io/socket.io.js"></script>
-<style>
-  body{font-family:Inter,system-ui; background:#070607;color:#ddd;display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px;}
-  #chat{width:100%;max-width:720px;height:68vh;overflow:auto;background:rgba(255,255,255,0.02);border-radius:8px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,0.6);}
-  .msg{margin:8px 0;padding:8px;border-radius:8px;}
-  .msg .who{font-weight:700;cursor:pointer;color:#c77dff}
-  .msg.system{background:linear-gradient(90deg, rgba(139,92,246,0.08), rgba(109,40,217,0.04));color:#fff}
-  .msg.normal{background:rgba(255,255,255,0.02)}
-  #inputArea{display:flex;gap:8px;width:100%;max-width:720px}
-  input,button{padding:10px;border-radius:8px;border:none}
-  input{flex:1;background:#111;color:#fff}
-  button{background:linear-gradient(90deg,#8b5cf6,#6d28d9);color:#fff}
-  /* popup */
-  #popup{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#0b0b0b;padding:16px;border-radius:10px;border:1px solid #3f0fcf;display:none;z-index:40}
-  #popup small{color:#999}
-</style>
+  <meta charset="UTF-8">
+  <title>TalkToMe Chat</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d0d0d;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    #messages {
+      width: 80%;
+      height: 70%;
+      overflow-y: auto;
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    #input {
+      width: 80%;
+      display: flex;
+      margin-top: 10px;
+    }
+    #m {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      outline: none;
+    }
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      background: purple;
+      color: white;
+      margin-left: 5px;
+      cursor: pointer;
+    }
+    .system-message {
+      color: red;
+      font-weight: bold;
+      background: rgba(255, 0, 0, 0.1);
+      border-radius: 8px;
+      padding: 5px;
+      margin: 5px 0;
+      text-align: center;
+    }
+    .username {
+      color: #9b59b6;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-  <h2>💬 Solara Chat</h2>
-  <div id="chat" role="log" aria-live="polite"></div>
+  <h1>💬 TalkToMe Chat</h1>
+  <div id="messages"></div>
+  <form id="input" action="">
+    <input id="m" autocomplete="off" placeholder="Type a message..." />
+    <button>Send</button>
+  </form>
 
-  <div id="inputArea">
-    <input id="message" placeholder="Type a message..." />
-    <button id="send">Send</button>
-  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let username = localStorage.getItem("username");
+    let cookieId = localStorage.getItem("userid");
 
-  <!-- small popup for userid -->
-  <div id="popup">
-    <div><strong id="popupName"></strong></div>
-    <div>UserID: <code id="popupId"></code></div>
-    <div style="margin-top:8px"><button id="copyBtn">Copy ID</button> <button id="closePopup">Close</button></div>
-    <small>Click a username in chat to view their ID.</small>
-  </div>
+    if (!username) {
+      username = prompt("Enter your username:");
+      localStorage.setItem("username", username);
+    }
 
-<script>
-  const socket = io();
-  const chat = document.getElementById('chat');
-  const send = document.getElementById('send');
-  const messageInput = document.getElementById('message');
+    socket.emit("set username", { username, cookieId });
 
-  // persistent username prompt
-  let username = localStorage.getItem('solara_username');
-  if(!username) {
-    username = prompt('Enter your username') || 'Anonymous';
-    localStorage.setItem('solara_username', username);
-  }
+    socket.on("setCookie", id => {
+      localStorage.setItem("userid", id);
+    });
 
-  // add message (supports system messages and clickable usernames)
-  function addMessage(msg) {
-    const div = document.createElement('div');
-    div.className = 'msg ' + (msg.system ? 'system' : 'normal');
-    // username clickable
-    const who = document.createElement('span');
-    who.className = 'who';
-    who.textContent = msg.user;
-    // attach userid to the DOM element for popup
-    who.dataset.userid = msg.userid || '(unknown)';
-    who.addEventListener('click', () => showPopup(msg.user, who.dataset.userid));
-    const text = document.createElement('span');
-    text.style.marginLeft = '8px';
-    text.textContent = msg.text ? msg.text : '';
-    const time = document.createElement('div');
-    time.style.fontSize='12px'; time.style.color='#aaa'; time.style.marginTop='6px';
-    time.textContent = msg.time || '';
-    // build message element
-    div.appendChild(who);
-    div.appendChild(text);
-    div.appendChild(time);
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-  }
+    document.querySelector("form").addEventListener("submit", e => {
+      e.preventDefault();
+      const input = document.getElementById("m");
+      if (input.value.trim() !== "") {
+        socket.emit("chat message", input.value.trim());
+        input.value = "";
+      }
+    });
 
-  // show popup with userid
-  const popup = document.getElementById('popup');
-  const popupName = document.getElementById('popupName');
-  const popupId = document.getElementById('popupId');
-  const copyBtn = document.getElementById('copyBtn');
-  const closePopup = document.getElementById('closePopup');
+    socket.on("chat message", msg => {
+      const item = document.createElement("div");
+      item.className = msg.system ? "system-message" : "user-message";
+      item.innerHTML = msg.system
+        ? `<strong>${msg.username}:</strong> ${msg.message}`
+        : `<strong class="username" data-userid="${msg.userId}">${msg.username}</strong>: ${msg.message}`;
+      document.getElementById("messages").appendChild(item);
+      item.scrollIntoView({ behavior: "smooth" });
+    });
 
-  function showPopup(name, id) {
-    popupName.textContent = name;
-    popupId.textContent = id;
-    popup.style.display = 'block';
-  }
-  copyBtn.onclick = () => {
-    navigator.clipboard.writeText(popupId.textContent).then(()=> alert('Copied'));
-  };
-  closePopup.onclick = () => { popup.style.display = 'none'; };
-
-  // handle server events
-  socket.on('chatHistory', (history) => { history.forEach(addMessage); });
-  socket.on('chatMessage', (msg) => { addMessage(msg); });
-  socket.on('bannedNotice', (notice) => {
-    alert(notice.text || 'You are banned.');
-  });
-
-  // send message
-  function sendMsg(){
-    const text = messageInput.value.trim();
-    if(!text) return;
-    socket.emit('chatMessage', { user: username, text });
-    messageInput.value = '';
-  }
-
-  send.addEventListener('click', sendMsg);
-  messageInput.addEventListener('keydown', (e)=> { if(e.key==='Enter') sendMsg(); });
-</script>
+    document.addEventListener("click", e => {
+      if (e.target.classList.contains("username")) {
+        const id = e.target.dataset.userid || "unknown";
+        alert(`User ID: ${id}`);
+      }
+    });
+  </script>
 </body>
 </html>
