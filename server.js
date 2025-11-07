@@ -73,7 +73,7 @@ io.on("connection", (socket) => {
     socket.username = username;
     socket.userId = userId;
 
-    // Send only last 100 messages to avoid duplicates
+    // Send last 100 messages to avoid duplication
     const lastMessages = messages.slice(-100);
     socket.emit("chat history", lastMessages);
 
@@ -140,7 +140,7 @@ app.get("/api/bans", (req, res) => {
   res.json(bans);
 });
 
-// Manual ban: only ID + reason required, username fetched automatically
+// Manual ban: only ID + reason required, username auto-fetched
 app.post("/admin/ban", (req, res) => {
   const { id, reason, password } = req.body;
   if (password !== ADMIN_PASSWORD) return res.status(403).send("Invalid password");
@@ -148,7 +148,7 @@ app.post("/admin/ban", (req, res) => {
   // Avoid duplicate ban
   if (bans.find(b => b.cookie === id)) return res.send("User already banned.");
 
-  // Find username from chat history
+  // Fetch username from chat history
   let userNameToUse = "Unknown";
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].userId === id) {
@@ -170,20 +170,34 @@ app.post("/admin/ban", (req, res) => {
   res.send(`${userNameToUse} (${id}) banned for ${reason}`);
 });
 
-// Unban
+// Unban with system message
 app.post("/admin/unban", (req, res) => {
   const { id, password } = req.body;
   if (password !== ADMIN_PASSWORD) return res.status(403).send("Invalid password");
 
-  const before = bans.length;
-  bans = bans.filter(b => b.cookie !== id && b.userId !== id);
+  const index = bans.findIndex(b => b.cookie === id || b.userId === id);
+  if (index === -1) return res.send("User not found.");
+
+  const unbannedUser = bans[index];
+  bans.splice(index, 1); // Remove ban
   saveBans();
 
-  if (bans.length === before) return res.send("User not found.");
-  res.send(`User ${id} unbanned.`);
+  // Broadcast system message
+  const sysMsg = {
+    username: "AutoMod",
+    message: `${unbannedUser.username || "Unknown"} has been unbanned.`,
+    system: true
+  };
+  io.emit("chat message", sysMsg);
+
+  messages.push(sysMsg);
+  messages = messages.slice(-100);
+  saveMessages();
+
+  res.send(`${unbannedUser.username || "Unknown"} (${id}) unbanned.`);
 });
 
-// Serve chat history JSON (optional, for debugging)
+// Optional chat history endpoint
 app.get("/chat-history.json", (req, res) => {
   res.json(messages);
 });
