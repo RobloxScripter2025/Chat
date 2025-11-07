@@ -12,7 +12,7 @@ const io = new Server(server);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; // safer fallback
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123"; // change to secure pw
 
 app.use(express.json());
 app.use(cookieParser());
@@ -22,10 +22,13 @@ let messages = [];
 let bans = [];
 let bannedWords = [];
 
+// --------------------
+// Helper functions
+// --------------------
 function safeRead(file, fallback = []) {
   try {
     if (fs.existsSync(file)) {
-      return JSON.parse(fs.readFileSync(file));
+      return JSON.parse(fs.readFileSync(file, "utf-8"));
     }
   } catch (e) {
     console.error(`Error reading ${file}:`, e);
@@ -41,7 +44,16 @@ function save(file, data) {
   }
 }
 
-// Load stored data
+// --------------------
+// Auto-create missing JSON files
+// --------------------
+for (const file of ["chat-history.json", "bans.json", "bannedwords.json"]) {
+  if (!fs.existsSync(file)) fs.writeFileSync(file, "[]");
+}
+
+// --------------------
+// Load data
+// --------------------
 function loadData() {
   messages = safeRead("chat-history.json");
   bans = safeRead("bans.json");
@@ -49,7 +61,9 @@ function loadData() {
 }
 loadData();
 
-// Serve admin
+// --------------------
+// Admin routes
+// --------------------
 app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
@@ -83,8 +97,11 @@ app.get("/chat-history.json", (req, res) => {
   res.sendFile(path.join(__dirname, "chat-history.json"));
 });
 
-// --- SOCKET.IO ---
+// --------------------
+// Socket.io
+// --------------------
 io.on("connection", (socket) => {
+  // Generate or read persistent ID
   const cookie = socket.handshake.headers.cookie || "";
   const idMatch = cookie.match(/uid=([^;]+)/);
   const id = idMatch ? idMatch[1] : socket.id;
@@ -96,22 +113,25 @@ io.on("connection", (socket) => {
     return;
   }
 
-  socket.emit("init history", messages);
+  // Send last 100 messages to new user
+  socket.emit("init history", messages.slice(-100));
 
   socket.on("chat message", (msg) => {
+    // Validate message object
     if (!msg || typeof msg !== "object") return;
     if (!msg.message || typeof msg.message !== "string") return;
     if (!msg.username || typeof msg.username !== "string") return;
 
-    // Check if user is already banned
+    // Skip banned users
     if (bans.some(b => b.cookie === id)) return;
 
     const content = msg.message.trim().toLowerCase();
 
-    // Check banned words safely
+    // AutoMod: banned words
     if (bannedWords.some(w => content.includes(w.toLowerCase()))) {
       bans.push({ username: msg.username, reason: "Used banned word", cookie: id });
       save("bans.json", bans);
+
       socket.emit("banned", "You were banned for using a banned word.");
       socket.disconnect(true);
 
@@ -129,6 +149,7 @@ io.on("connection", (socket) => {
       return;
     }
 
+    // Normal chat
     messages.push(msg);
     messages = messages.slice(-100);
     save("chat-history.json", messages);
@@ -136,4 +157,5 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(PORT, () => console.log(`✅ Chat server running on port ${PORT}`));
+// --------------------
+server.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
