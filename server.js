@@ -15,7 +15,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const ADMIN_ID = process.env.ADMIN_ID;
+const ADMIN_ID = "c62a184e-8a00-4988-ba8d-89e859806741";
 
 const BANNED_WORDS_FILE = path.join(__dirname, "bannedwords.json");
 const BANS_FILE = path.join(__dirname, "ban.json");
