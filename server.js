@@ -15,6 +15,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_ID = process.env.ADMIN_ID; // only this user can execute admin commands
 
 // Paths
 const BANNED_WORDS_FILE = path.join(__dirname, "bannedwords.json");
@@ -23,22 +24,16 @@ const MESSAGES_FILE = path.join(__dirname, "chat-history.json");
 
 // Load banned words
 let bannedWords = [];
-if (fs.existsSync(BANNED_WORDS_FILE)) {
-  bannedWords = JSON.parse(fs.readFileSync(BANNED_WORDS_FILE, "utf-8"));
-}
+if (fs.existsSync(BANNED_WORDS_FILE)) bannedWords = JSON.parse(fs.readFileSync(BANNED_WORDS_FILE, "utf-8"));
 
 // Load bans
 let bans = [];
-if (fs.existsSync(BANS_FILE)) {
-  bans = JSON.parse(fs.readFileSync(BANS_FILE, "utf-8"));
-}
+if (fs.existsSync(BANS_FILE)) bans = JSON.parse(fs.readFileSync(BANS_FILE, "utf-8"));
 const saveBans = () => fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
 
 // Load messages
 let messages = [];
-if (fs.existsSync(MESSAGES_FILE)) {
-  messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, "utf-8"));
-}
+if (fs.existsSync(MESSAGES_FILE)) messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, "utf-8"));
 const saveMessages = () => fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
 
 // Middleware
@@ -49,8 +44,7 @@ app.use(express.static("public"));
 // Block banned users
 app.use((req, res, next) => {
   const cookieId = req.cookies?.userid;
-  const banned = bans.find(b => b.cookie === cookieId);
-  if (banned) return res.status(403).send(`You are banned: ${banned.reason}`);
+  if (bans.find(b => b.cookie === cookieId)) return res.status(403).send("You are banned.");
   next();
 });
 
@@ -59,7 +53,7 @@ io.on("connection", (socket) => {
   let username;
   let userId;
 
-  // Set username and persistent ID
+  // Set username & persistent cookie
   socket.on("set username", (data) => {
     username = data.username || "Anonymous";
 
@@ -73,31 +67,33 @@ io.on("connection", (socket) => {
     socket.username = username;
     socket.userId = userId;
 
-    // Send last 100 messages to avoid duplication
+    // Send last 100 messages
     const lastMessages = messages.slice(-100);
     socket.emit("chat history", lastMessages);
 
     console.log(`🟢 New user connected: ${username} (${userId})`);
   });
 
-  // Handle incoming chat messages
+  // Handle messages
   socket.on("chat message", (msg) => {
     if (!username || !userId) return;
 
-    // Ignore messages from banned users
     if (bans.find(b => b.cookie === userId)) {
       socket.emit("bannedNotice", { text: "You are banned." });
       return;
     }
 
-    const lowerMsg = msg.toLowerCase();
+    if (msg.startsWith("/")) {
+      handleCommand(msg, socket);
+      return;
+    }
 
-    // AutoMod banned words
+    // AutoMod
+    const lowerMsg = msg.toLowerCase();
     const foundWord = bannedWords.find(w => lowerMsg.includes(w.toLowerCase()));
     if (foundWord) {
       if (!bans.find(b => b.cookie === userId)) {
         const reason = `Used banned word "${foundWord}"`;
-
         bans.push({ username, cookie: userId, reason, time: Date.now() });
         saveBans();
 
@@ -112,7 +108,6 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Normal message
     const msgData = { username, userId, message: msg };
     messages.push(msgData);
     messages = messages.slice(-100);
@@ -126,80 +121,112 @@ io.on("connection", (socket) => {
   });
 });
 
-//
-// ---------- Admin Routes ----------
-//
+// ---------------- Command handler ----------------
+function handleCommand(msg, socket) {
+  const args = msg.trim().split(" ");
+  const command = args[0].toLowerCase();
 
-// Serve admin page
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/admin.html"));
-});
-
-// Return JSON list of bans
-app.get("/api/bans", (req, res) => {
-  res.json(bans);
-});
-
-// Manual ban: only ID + reason required, username auto-fetched
-app.post("/admin/ban", (req, res) => {
-  const { id, reason, password } = req.body;
-  if (password !== ADMIN_PASSWORD) return res.status(403).send("Invalid password");
-
-  // Avoid duplicate ban
-  if (bans.find(b => b.cookie === id)) return res.send("User already banned.");
-
-  // Fetch username from chat history
-  let userNameToUse = "Unknown";
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].userId === id) {
-      userNameToUse = messages[i].username;
-      break;
-    }
+  // Admin-only commands
+  const adminCommands = ["/ban", "/unban", "/server", "/updateusername"];
+  if (adminCommands.includes(command) && socket.userId !== ADMIN_ID) {
+    socket.emit("chat message", { username: "System", message: "❌ You are not an admin.", system: true });
+    return;
   }
 
-  bans.push({ username: userNameToUse, cookie: id, reason, time: Date.now() });
-  saveBans();
+  switch(command) {
+    // ---------- Admin Commands ----------
+    case "/ban":
+      const banId = args[1];
+      const banReason = args.slice(2).join(" ") || "No reason provided";
+      if (!banId) return socket.emit("chat message", { username: "System", message: "Usage: /ban userid reason", system: true });
 
-  const sysMsg = { username: "AutoMod", message: `${userNameToUse} has been manually banned for ${reason}`, system: true };
-  io.emit("chat message", sysMsg);
+      if (!bans.find(b => b.cookie === banId)) {
+        let uname = "Unknown";
+        for (let i = messages.length-1; i>=0; i--) if (messages[i].userId===banId){uname=messages[i].username; break;}
+        bans.push({ username: uname, cookie: banId, reason: banReason, time: Date.now() });
+        saveBans();
 
-  messages.push(sysMsg);
-  messages = messages.slice(-100);
-  saveMessages();
+        const sysMsg = { username: "AutoMod", message: `${uname} has been manually banned for ${banReason}`, system: true };
+        io.emit("chat message", sysMsg);
+      }
+      break;
 
-  res.send(`${userNameToUse} (${id}) banned for ${reason}`);
-});
+    case "/unban":
+      const unbanId = args[1];
+      if (!unbanId) return socket.emit("chat message", { username: "System", message: "Usage: /unban userid", system: true });
 
-// Unban with system message
-app.post("/admin/unban", (req, res) => {
-  const { id, password } = req.body;
-  if (password !== ADMIN_PASSWORD) return res.status(403).send("Invalid password");
+      const index = bans.findIndex(b => b.cookie===unbanId || b.userId===unbanId);
+      if (index !== -1) {
+        const unbannedUser = bans[index];
+        bans.splice(index,1);
+        saveBans();
 
-  const index = bans.findIndex(b => b.cookie === id || b.userId === id);
-  if (index === -1) return res.send("User not found.");
+        const sysMsg = { username: "AutoMod", message: `${unbannedUser.username || "Unknown"} has been unbanned.`, system: true };
+        io.emit("chat message", sysMsg);
 
-  const unbannedUser = bans[index];
-  bans.splice(index, 1); // Remove ban
-  saveBans();
+        messages.push(sysMsg);
+        messages = messages.slice(-100);
+        saveMessages();
+      }
+      break;
 
-  // Broadcast system message
-  const sysMsg = {
-    username: "AutoMod",
-    message: `${unbannedUser.username || "Unknown"} has been unbanned.`,
-    system: true
-  };
-  io.emit("chat message", sysMsg);
+    case "/server":
+      const subCommand = args[1]?.toLowerCase();
+      switch(subCommand) {
+        case "say":
+          const sayMsg = args.slice(2).join(" ");
+          io.emit("chat message", { username: "Server", message: sayMsg, system: true });
+          break;
+        case "update":
+          io.emit("server update");
+          break;
+        case "listusers":
+          const onlineUsers = Array.from(io.sockets.sockets.values()).map(s => `${s.username} (${s.userId})`);
+          socket.emit("chat message", { username: "Server", message: `Online Users:\n${onlineUsers.join("\n")}`, system: true });
+          break;
+        case "updatestatus":
+          const status = args[2] || "online";
+          io.emit("server status", status);
+          break;
+        case "updateusername":
+          const targetId = args[2];
+          const newName = args.slice(3).join(" ");
+          for (let s of io.sockets.sockets.values()) if(s.userId===targetId) s.username=newName;
+          messages.forEach(m => { if(m.userId===targetId) m.username=newName; });
+          saveMessages();
+          io.emit("chat message", { username: "Server", message: `${targetId} username updated to ${newName}`, system: true });
+          break;
+        default:
+          socket.emit("chat message", { username: "Server", message: "Unknown /server command", system: true });
+      }
+      break;
 
-  messages.push(sysMsg);
-  messages = messages.slice(-100);
-  saveMessages();
+    // ---------- User Commands ----------
+    case "/online":
+      const onlineCount = io.sockets.sockets.size;
+      socket.emit("chat message", { username: "Server", message: `Online users: ${onlineCount}`, system: true });
+      break;
 
-  res.send(`${unbannedUser.username || "Unknown"} (${id}) unbanned.`);
-});
+    case "/report":
+      const reportId = args[1];
+      const reportMsg = args.slice(reportId ? 2 : 1).join(" ");
+      socket.emit("chat message", { username: "Server", message: `Report sent: ${reportMsg}`, system: true });
+      // TODO: send report to admin via DM or logging
+      break;
+
+    default:
+      socket.emit("chat message", { username: "System", message: `Unknown command: ${command}`, system: true });
+  }
+}
 
 // Optional chat history endpoint
 app.get("/chat-history.json", (req, res) => {
   res.json(messages);
+});
+
+// Admin page
+app.get("/admin", (req,res) => {
+  res.sendFile(path.join(__dirname, "public/admin.html"));
 });
 
 const PORT = process.env.PORT || 3000;
