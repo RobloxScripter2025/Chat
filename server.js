@@ -497,7 +497,7 @@ Admin Commands:
       socket.emit("chat message", {
         username: "Server",
         message: helpMsg,
-        system: false,
+        system: true,
       });
       break;
     }
@@ -505,7 +505,7 @@ Admin Commands:
     default:
       socket.emit("chat message", {
         username: "System",
-        message: `Unknown command: ${command}`,
+        message: `Unknown command: ${command} , try running /help`,
         system: true,
       });
   }
