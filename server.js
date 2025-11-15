@@ -479,7 +479,7 @@ function handleCommand(msg, socket) {
         "/removebannedword [word]"
       ];
 
-      const isAdmin = socket.userId === ADMIN_ID;
+      const isAdmin = ADMIN_ID.includes(socket.userId);
 
       const output = isAdmin
         ? `Commands:\n${[...userCommands, ...adminCommands].join("\n")}`
