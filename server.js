@@ -540,3 +540,8 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`✅ Server running on port ${PORT}`)
 );
+
+console.log('if you are a school admiistrator; go away');
+console.log('alr skid, go away');
+console.log('bro aint nothing here');
+console.log('https://html.cafe/xefa72549');
