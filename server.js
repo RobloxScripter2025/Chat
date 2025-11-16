@@ -14,7 +14,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Multi-admin support
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+// Multiple admin IDs now supported
 const ADMIN_ID = [
   "e3078d0d-aa6c-410c-8015-9a7d269fe230",
   "694beb8e-c652-41b0-9922-36b34f55282d"
@@ -33,7 +34,8 @@ let bannedWords = fs.existsSync(BANNED_WORDS_FILE)
 let bans = fs.existsSync(BANS_FILE)
   ? JSON.parse(fs.readFileSync(BANS_FILE, "utf-8"))
   : [];
-const saveBans = () => fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
+const saveBans = () =>
+  fs.writeFileSync(BANS_FILE, JSON.stringify(bans, null, 2));
 
 // Load chat history
 let messages = fs.existsSync(MESSAGES_FILE)
@@ -41,6 +43,9 @@ let messages = fs.existsSync(MESSAGES_FILE)
   : [];
 const saveMessages = () =>
   fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
+
+// Mute tracking
+let mutedUsers = {};
 
 // Middleware
 app.use(express.json());
@@ -54,6 +59,14 @@ app.use((req, res, next) => {
     return res.status(403).send("You are banned.");
   next();
 });
+
+// Auto-unmute cleanup every 60 seconds
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, endTime] of Object.entries(mutedUsers)) {
+    if (endTime <= now) delete mutedUsers[id];
+  }
+}, 60000);
 
 // Socket.io
 io.on("connection", (socket) => {
@@ -82,6 +95,15 @@ io.on("connection", (socket) => {
 
     if (bans.find((b) => b.cookie === userId)) {
       socket.emit("bannedNotice", { text: "You are banned." });
+      return;
+    }
+
+    if (mutedUsers[userId] && Date.now() < mutedUsers[userId]) {
+      socket.emit("chat message", {
+        username: "System",
+        message: "You are currently muted.",
+        system: true,
+      });
       return;
     }
 
@@ -140,6 +162,7 @@ function handleCommand(msg, socket) {
   const args = msg.trim().split(" ");
   const command = args[0].toLowerCase();
 
+  // Admin commands
   const adminCommands = [
     "/ban",
     "/unban",
@@ -154,11 +177,10 @@ function handleCommand(msg, socket) {
 
   const isAdmin = ADMIN_ID.includes(socket.userId);
 
-  // Check if command requires admin
   if (adminCommands.includes(command) && !isAdmin) {
     socket.emit("chat message", {
       username: "System",
-      message: "❌ You are not an admin.",
+      message: "❌ You are not an admin XD, try again after asking for admin.",
       system: true,
     });
     return;
@@ -239,15 +261,6 @@ function handleCommand(msg, socket) {
     }
 
     case "/server": {
-      if (!isAdmin) {
-        socket.emit("chat message", {
-          username: "System",
-          message: "❌ You are not an admin. /server commands are disabled.",
-          system: true,
-        });
-        break;
-      }
-
       const sub = args[1]?.toLowerCase();
 
       switch (sub) {
@@ -289,7 +302,6 @@ function handleCommand(msg, socket) {
       break;
     }
 
-    // ---------- Rest of admin & user commands ----------
     case "/mute": {
       const tId = args[1];
       const dur = args[2] || "5m";
@@ -299,6 +311,13 @@ function handleCommand(msg, socket) {
           message: "Usage: /mute userid duration",
           system: true,
         });
+
+      let durationMs = 5 * 60 * 1000; // default 5 min
+      if (dur.endsWith("s")) durationMs = parseInt(dur) * 1000;
+      else if (dur.endsWith("m")) durationMs = parseInt(dur) * 60 * 1000;
+      else if (dur.endsWith("h")) durationMs = parseInt(dur) * 60 * 60 * 1000;
+
+      mutedUsers[tId] = Date.now() + durationMs;
 
       io.emit("chat message", {
         username: "AutoMod",
@@ -505,7 +524,7 @@ Admin Commands:
     default:
       socket.emit("chat message", {
         username: "System",
-        message: `Unknown command: ${command} , try running /help`,
+        message: `Unknown command: ${command}`,
         system: true,
       });
   }
