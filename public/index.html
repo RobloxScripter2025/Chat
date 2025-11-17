@@ -122,12 +122,19 @@
     const chat = document.getElementById("chat");
     const form = document.getElementById("messageForm");
     const input = document.getElementById("messageInput");
+    const displayedMessages = new Set();
 
     async function loadHistory() {
       const res = await fetch("/api/messages");
       if (!res.ok) return;
       const messages = await res.json();
-      messages.forEach(addMessage);
+      messages.forEach(msg => {
+        const msgId = `${msg.userId}-${msg.timestamp || msg.message}`;
+        if (!displayedMessages.has(msgId)) {
+          displayedMessages.add(msgId);
+          addMessage(msg);
+        }
+      });
       chat.scrollTop = chat.scrollHeight;
     }
 
@@ -176,7 +183,11 @@
         }
         
         if (res.ok) {
-          addMessage(data);
+          const msgId = `${data.userId}-${data.timestamp || data.message}`;
+          if (!displayedMessages.has(msgId)) {
+            displayedMessages.add(msgId);
+            addMessage(data);
+          }
         } else {
           alert(data.error || "Failed to send message");
         }
@@ -191,7 +202,6 @@
       if (!input.value) return;
       await sendMessage(input.value);
       input.value = "";
-      setTimeout(loadHistory, 1000);
     });
 
     setInterval(loadHistory, 3000);
