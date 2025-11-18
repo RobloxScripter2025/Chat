@@ -1,3 +1,5 @@
+#WE ARE HAVING ISSUES CONCERNING THE CLOUDFLAIR ISSUE, PLEASE REFRAIN FROM USING THIS SERVICE AT THIS TIME.
+
 # Links
 [Solara chat - railway](https://chat-production-aabd.up.railway.app/)
 
