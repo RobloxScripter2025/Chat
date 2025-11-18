@@ -17,8 +17,8 @@ const io = new Server(server);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 // Multiple admin IDs now supported
 const ADMIN_ID = [
-  "e3078d0d-aa6c-410c-8015-9a7d269fe230",
-  "694beb8e-c652-41b0-9922-36b34f55282d",
+  "c62a184e-8a00-4988-ba8d-89e859806741",
+  "",
   "514dc434-9301-40c7-a1ef-f8aea5a9cbd6"
 ];
 
