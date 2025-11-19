@@ -3,6 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>Chat Room</title>
+
+  <!-- FORCE BROWSER TO LOAD NEW VERSION -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -105,9 +111,11 @@
     <button>Send</button>
   </form>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script>
-    const socket = io();
+  <!-- CACHE-BUST SOCKET.IO -->
+  <script src="/socket.io/socket.io.js?v=5"></script>
+
+  <script id="client-script" data-version="5">
+    const socket = io({ transports: ["websocket"] });
 
     let username = localStorage.getItem("username");
     let userId = localStorage.getItem("userid");
@@ -129,7 +137,7 @@
     const input = document.getElementById("messageInput");
 
     async function loadHistory() {
-      const res = await fetch("/chat-history.json");
+      const res = await fetch("/chat-history.json?v=5");
       if (!res.ok) return;
       const messages = await res.json();
       messages.forEach(addMessage);
@@ -140,6 +148,7 @@
 
     function addMessage(msg) {
       const div = document.createElement("div");
+
       if (msg.system) {
         div.classList.add("system");
         div.textContent = msg.message;
@@ -151,13 +160,16 @@
         nameSpan.textContent = msg.username;
         nameSpan.classList.add("username");
         nameSpan.onclick = () => alert(`User ID: ${msg.userId}`);
+
         div.appendChild(nameSpan);
         div.appendChild(document.createTextNode(`: ${msg.message}`));
 
+        // Desktop notification
         if (mention && Notification.permission === "granted") {
           new Notification(`${msg.username} mentioned you!`, { body: msg.message });
         }
       }
+
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -172,8 +184,9 @@
       input.value = "";
     });
 
-    // Request notification permission
-    if (Notification.permission === "default") Notification.requestPermission();
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
+    }
   </script>
 </body>
 </html>
