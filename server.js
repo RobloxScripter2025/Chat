@@ -15,11 +15,10 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-// Multiple admin IDs now supported
+// Allow multiple admin IDs
 const ADMIN_ID = [
   "e3078d0d-aa6c-410c-8015-9a7d269fe230",
   "694beb8e-c652-41b0-9922-36b34f55282d",
-  "514dc434-9301-40c7-a1ef-f8aea5a9cbd6"
 ];
 
 const BANNED_WORDS_FILE = path.join(__dirname, "bannedwords.json");
@@ -45,8 +44,8 @@ let messages = fs.existsSync(MESSAGES_FILE)
 const saveMessages = () =>
   fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages, null, 2));
 
-// Mute tracking
-let mutedUsers = {};
+// Track muted users
+let mutedUsers = {}; // { userId: unmuteTimestamp }
 
 // Middleware
 app.use(express.json());
@@ -60,14 +59,6 @@ app.use((req, res, next) => {
     return res.status(403).send("You are banned.");
   next();
 });
-
-// Auto-unmute cleanup every 60 seconds
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, endTime] of Object.entries(mutedUsers)) {
-    if (endTime <= now) delete mutedUsers[id];
-  }
-}, 60000);
 
 // Socket.io
 io.on("connection", (socket) => {
@@ -94,15 +85,23 @@ io.on("connection", (socket) => {
   socket.on("chat message", (msg) => {
     if (!username || !userId) return;
 
+    // Auto-unmute cleanup
+    const now = Date.now();
+    for (const [uid, time] of Object.entries(mutedUsers)) {
+      if (time <= now) delete mutedUsers[uid];
+    }
+
     if (bans.find((b) => b.cookie === userId)) {
       socket.emit("bannedNotice", { text: "You are banned." });
       return;
     }
 
-    if (mutedUsers[userId] && Date.now() < mutedUsers[userId]) {
+    if (mutedUsers[userId]) {
       socket.emit("chat message", {
         username: "System",
-        message: "You are currently muted.",
+        message: `You are muted for ${Math.ceil(
+          (mutedUsers[userId] - now) / 1000
+        )}s`,
         system: true,
       });
       return;
@@ -113,7 +112,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // AutoMod
+    // AutoMod banned words
     const lowerMsg = msg.toLowerCase();
     const foundWord = bannedWords.find((w) =>
       lowerMsg.includes(w.toLowerCase())
@@ -151,6 +150,16 @@ io.on("connection", (socket) => {
     saveMessages();
 
     io.emit("chat message", msgData);
+
+    // Mentions
+    for (const s of io.sockets.sockets.values()) {
+      if (msg.includes(`@${s.username}`) && s.userId !== userId) {
+        s.emit("mention", {
+          from: username,
+          message: msg,
+        });
+      }
+    }
   });
 
   socket.on("disconnect", () =>
@@ -181,7 +190,7 @@ function handleCommand(msg, socket) {
   if (adminCommands.includes(command) && !isAdmin) {
     socket.emit("chat message", {
       username: "System",
-      message: "❌ You are not an admin XD, try again after asking for admin.",
+      message: "❌ You are not an admin.",
       system: true,
     });
     return;
@@ -192,7 +201,6 @@ function handleCommand(msg, socket) {
     case "/ban": {
       const banId = args[1];
       const reason = args.slice(2).join(" ") || "No reason provided";
-
       if (!banId)
         return socket.emit("chat message", {
           username: "System",
@@ -252,7 +260,6 @@ function handleCommand(msg, socket) {
           message: `${u.username || "Unknown"} has been unbanned.`,
           system: true,
         };
-
         io.emit("chat message", sysMsg);
         messages.push(sysMsg);
         messages = messages.slice(-100);
@@ -263,7 +270,6 @@ function handleCommand(msg, socket) {
 
     case "/server": {
       const sub = args[1]?.toLowerCase();
-
       switch (sub) {
         case "say":
           io.emit("chat message", {
@@ -272,11 +278,9 @@ function handleCommand(msg, socket) {
             system: true,
           });
           break;
-
         case "update":
           io.emit("server update");
           break;
-
         case "listusers": {
           const online = Array.from(io.sockets.sockets.values()).map(
             (s) => `${s.username} (${s.userId})`
@@ -288,11 +292,9 @@ function handleCommand(msg, socket) {
           });
           break;
         }
-
         case "updatestatus":
           io.emit("server status", args[2] || "online");
           break;
-
         default:
           socket.emit("chat message", {
             username: "Server",
@@ -313,12 +315,8 @@ function handleCommand(msg, socket) {
           system: true,
         });
 
-      let durationMs = 5 * 60 * 1000; // default 5 min
-      if (dur.endsWith("s")) durationMs = parseInt(dur) * 1000;
-      else if (dur.endsWith("m")) durationMs = parseInt(dur) * 60 * 1000;
-      else if (dur.endsWith("h")) durationMs = parseInt(dur) * 60 * 60 * 1000;
-
-      mutedUsers[tId] = Date.now() + durationMs;
+      const durMs = parseDuration(dur);
+      mutedUsers[tId] = Date.now() + durMs;
 
       io.emit("chat message", {
         username: "AutoMod",
@@ -337,9 +335,7 @@ function handleCommand(msg, socket) {
           system: true,
         });
 
-      for (let s of io.sockets.sockets.values())
-        if (s.userId === tId) s.disconnect();
-
+      for (let s of io.sockets.sockets.values()) if (s.userId === tId) s.disconnect();
       io.emit("chat message", {
         username: "AutoMod",
         message: `User ${tId} was kicked.`,
@@ -379,21 +375,15 @@ function handleCommand(msg, socket) {
 
     case "/addbannedword":
       bannedWords.push(args[1]);
-      fs.writeFileSync(
-        BANNED_WORDS_FILE,
-        JSON.stringify(bannedWords, null, 2)
-      );
+      fs.writeFileSync(BANNED_WORDS_FILE, JSON.stringify(bannedWords, null, 2));
       break;
 
     case "/removebannedword":
       bannedWords = bannedWords.filter((w) => w !== args[1]);
-      fs.writeFileSync(
-        BANNED_WORDS_FILE,
-        JSON.stringify(bannedWords, null, 2)
-      );
+      fs.writeFileSync(BANNED_WORDS_FILE, JSON.stringify(bannedWords, null, 2));
       break;
 
-    // ---------- User Commands ----------
+    // ---------- User ----------
     case "/online":
       socket.emit("chat message", {
         username: "Server",
@@ -413,7 +403,7 @@ function handleCommand(msg, socket) {
       break;
     }
 
-    case "/stats": {
+    case "/stats":
       socket.emit("chat message", {
         username: "Server",
         message: `Your stats:\nMessages sent: ${
@@ -422,7 +412,6 @@ function handleCommand(msg, socket) {
         system: true,
       });
       break;
-    }
 
     case "/roll": {
       const dice = args[1]?.toLowerCase()?.split("d");
@@ -434,12 +423,10 @@ function handleCommand(msg, socket) {
         });
         break;
       }
-
       const [num, faces] = dice.map(Number);
       const results = [];
       for (let i = 0; i < num; i++)
         results.push(1 + Math.floor(Math.random() * faces));
-
       socket.emit("chat message", {
         username: "Server",
         message: `${socket.username} rolled: ${results.join(", ")}`,
@@ -472,7 +459,6 @@ function handleCommand(msg, socket) {
       const tUser = Array.from(io.sockets.sockets.values()).find(
         (s) => s.userId === tId
       );
-
       if (!tUser) {
         socket.emit("chat message", {
           username: "Server",
@@ -501,7 +487,6 @@ function handleCommand(msg, socket) {
 
       if (isAdmin) {
         helpMsg += `
-
 Admin Commands:
   /ban [userid] [reason]
   /unban [userid]
@@ -531,6 +516,20 @@ Admin Commands:
   }
 }
 
+// Helpers
+function parseDuration(str) {
+  const match = str.match(/^(\d+)(s|m|h)$/);
+  if (!match) return 300000; // default 5 minutes
+  const [, val, unit] = match;
+  const num = parseInt(val);
+  switch (unit) {
+    case "s": return num * 1000;
+    case "m": return num * 60 * 1000;
+    case "h": return num * 60 * 60 * 1000;
+    default: return 300000;
+  }
+}
+
 // Optional endpoints
 app.get("/chat-history.json", (req, res) => res.json(messages));
 app.get("/admin", (req, res) =>
@@ -541,8 +540,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`✅ Server running on port ${PORT}`)
 );
-
-console.log('if you are a school admiistrator; go away');
-console.log('alr skid, go away');
-console.log('bro aint nothing here');
-console.log('https://html.cafe/xefa72549');
